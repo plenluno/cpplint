@@ -93,6 +93,7 @@ import unicodedata
 _USAGE = """
 Syntax: cpplint.py [--verbose=#] [--output=vs7] [--filter=-x,+y,...]
                    [--counting=total|toplevel|detailed]
+                   [--strip=#]
         <file> [file] ...
 
   The style guidelines this tries to follow are those in
@@ -139,6 +140,10 @@ Syntax: cpplint.py [--verbose=#] [--output=vs7] [--filter=-x,+y,...]
       the top-level categories like 'build' and 'whitespace' will
       also be printed. If 'detailed' is provided, then a count
       is provided for each category like 'build/class'.
+
+    strip=#
+      Specify the number of slashes to strip from target header paths.
+      This option is only valid for [build/header_guard].
 """
 
 # We categorize each error message we print.  Here are the categories.
@@ -498,6 +503,7 @@ class _CppLintState(object):
     self.filters = _DEFAULT_FILTERS[:]
     self.counting = 'total'  # In what way are we counting errors?
     self.errors_by_category = {}  # string to int dict storing error counts
+    self.strip_count = 0
 
     # output format:
     # "emacs" - format that emacs can parse (default)
@@ -517,6 +523,10 @@ class _CppLintState(object):
   def SetCountingStyle(self, counting_style):
     """Sets the module's counting options."""
     self.counting = counting_style
+
+  def SetStripCount(self, count):
+    """Sets the number of slashes to strip."""
+    self.strip_count = count
 
   def SetFilters(self, filters):
     """Sets the error-message filters.
@@ -592,6 +602,13 @@ def _SetCountingStyle(level):
   """Sets the module's counting options."""
   _cpplint_state.SetCountingStyle(level)
 
+def _StripCount():
+  """Returns the module's strip count."""
+  return _cpplint_state.strip_count
+
+def _SetStripCount(count):
+  """Sets the module's strip count."""
+  _cpplint_state.SetStripCount(count)
 
 def _Filters():
   """Returns the module's list of output filters, as a list."""
@@ -1034,7 +1051,15 @@ def GetHeaderGuardCPPVariable(filename):
   filename = re.sub(r'_flymake\.h$', '.h', filename)
 
   fileinfo = FileInfo(filename)
-  cppvar = re.sub(r'[-./\s]', '_', fileinfo.RepositoryName()).upper() + '_'
+  reponame = fileinfo.RepositoryName()
+  strip_count = _StripCount()
+  for i in range(strip_count):
+    index = reponame.find("/")
+    if index < 0:
+      break
+    else:
+      reponame = reponame[index + 1:]
+  cppvar = re.sub(r'[-./\s]', '_', reponame).upper() + '_'
   if cppvar.startswith("INCLUDE_"):
     cppvar = cppvar[8:]
   return cppvar
@@ -3292,7 +3317,8 @@ def ParseArguments(args):
   try:
     (opts, filenames) = getopt.getopt(args, '', ['help', 'output=', 'verbose=',
                                                  'counting=',
-                                                 'filter='])
+                                                 'filter=',
+                                                 'strip='])
   except getopt.GetoptError:
     PrintUsage('Invalid arguments.')
 
@@ -3300,6 +3326,7 @@ def ParseArguments(args):
   output_format = _OutputFormat()
   filters = ''
   counting_style = ''
+  strip_count = _StripCount()
 
   for (opt, val) in opts:
     if opt == '--help':
@@ -3318,6 +3345,8 @@ def ParseArguments(args):
       if val not in ('total', 'toplevel', 'detailed'):
         PrintUsage('Valid counting options are total, toplevel, and detailed')
       counting_style = val
+    elif opt == '--strip':
+      strip_count = int(val)
 
   if not filenames:
     PrintUsage('No files were specified.')
@@ -3326,6 +3355,7 @@ def ParseArguments(args):
   _SetVerboseLevel(verbosity)
   _SetFilters(filters)
   _SetCountingStyle(counting_style)
+  _SetStripCount(strip_count)
 
   return filenames
 
