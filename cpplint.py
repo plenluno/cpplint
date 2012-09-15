@@ -93,7 +93,7 @@ import unicodedata
 _USAGE = """
 Syntax: cpplint.py [--verbose=#] [--output=vs7] [--filter=-x,+y,...]
                    [--counting=total|toplevel|detailed]
-                   [--strip=#]
+                   [--strip=#] [--prefix=pfx]
         <file> [file] ...
 
   The style guidelines this tries to follow are those in
@@ -143,6 +143,10 @@ Syntax: cpplint.py [--verbose=#] [--output=vs7] [--filter=-x,+y,...]
 
     strip=#
       Specify the number of slashes to strip from target header paths.
+      This option is only valid for [build/header_guard].
+
+    prefix=pfx
+      Specify the prefix of include guard macros.
       This option is only valid for [build/header_guard].
 """
 
@@ -504,6 +508,7 @@ class _CppLintState(object):
     self.counting = 'total'  # In what way are we counting errors?
     self.errors_by_category = {}  # string to int dict storing error counts
     self.strip_count = 0
+    self.prefix = ''
 
     # output format:
     # "emacs" - format that emacs can parse (default)
@@ -527,6 +532,10 @@ class _CppLintState(object):
   def SetStripCount(self, count):
     """Sets the number of slashes to strip."""
     self.strip_count = count
+
+  def SetPrefix(self, pfx):
+    """Sets the prefix of include guard macros."""
+    self.prefix = pfx
 
   def SetFilters(self, filters):
     """Sets the error-message filters.
@@ -609,6 +618,14 @@ def _StripCount():
 def _SetStripCount(count):
   """Sets the module's strip count."""
   _cpplint_state.SetStripCount(count)
+
+def _Prefix():
+  """Returns the module's prefix."""
+  return _cpplint_state.prefix
+
+def _SetPrefix(pfx):
+  """Sets the module's prefix."""
+  _cpplint_state.SetPrefix(pfx)
 
 def _Filters():
   """Returns the module's list of output filters, as a list."""
@@ -1062,6 +1079,9 @@ def GetHeaderGuardCPPVariable(filename):
   cppvar = re.sub(r'[-./\s]', '_', reponame).upper() + '_'
   if cppvar.startswith("INCLUDE_"):
     cppvar = cppvar[8:]
+  prefix = _Prefix().upper()
+  if prefix and not cppvar.startswith(prefix):
+    cppvar = prefix + '_' + cppvar
   return cppvar
 
 
@@ -3318,7 +3338,7 @@ def ParseArguments(args):
     (opts, filenames) = getopt.getopt(args, '', ['help', 'output=', 'verbose=',
                                                  'counting=',
                                                  'filter=',
-                                                 'strip='])
+                                                 'strip=', 'prefix='])
   except getopt.GetoptError:
     PrintUsage('Invalid arguments.')
 
@@ -3327,6 +3347,7 @@ def ParseArguments(args):
   filters = ''
   counting_style = ''
   strip_count = _StripCount()
+  prefix = _Prefix()
 
   for (opt, val) in opts:
     if opt == '--help':
@@ -3347,6 +3368,8 @@ def ParseArguments(args):
       counting_style = val
     elif opt == '--strip':
       strip_count = int(val)
+    elif opt == '--prefix':
+      prefix = val
 
   if not filenames:
     PrintUsage('No files were specified.')
@@ -3356,6 +3379,7 @@ def ParseArguments(args):
   _SetFilters(filters)
   _SetCountingStyle(counting_style)
   _SetStripCount(strip_count)
+  _SetPrefix(prefix)
 
   return filenames
 
